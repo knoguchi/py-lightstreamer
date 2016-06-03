@@ -116,7 +116,7 @@ class DecodeFieldTestCase(unittest.TestCase):
         self.assertEqual(_decode_field('$$'), '$')
 
     def test_unicode_escape(self):
-        self.assertEqual(_decode_field(r'\u2603'), u'\N{SNOWMAN}')
+        self.assertEqual(_decode_field(r'\u2603'), '\N{SNOWMAN}')
 
 
 class ReplaceUrlHostTestCase(unittest.TestCase):
@@ -132,12 +132,12 @@ class ReplaceUrlHostTestCase(unittest.TestCase):
 class LsClientTestCase(unittest.TestCase):
     def test_is_transient_error(self):
         import socket
-        import urllib2
+        import urllib.request, urllib.error, urllib.parse
         is_transient_error = LsClient('', None)._is_transient_error
         assert is_transient_error(socket.error())
-        assert is_transient_error(urllib2.URLError(socket.error()))
+        assert is_transient_error(urllib.error.URLError(socket.error()))
         assert is_transient_error(TransientError('eek'))
-        assert not is_transient_error(urllib2.URLError('apocalypse'))
+        assert not is_transient_error(urllib.error.URLError('apocalypse'))
 
 
 if __name__ == '__main__':

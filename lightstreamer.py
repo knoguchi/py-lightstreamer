@@ -17,17 +17,17 @@
 """Quick'n'dirty threaded Lightstreamer HTTP client.
 """
 
-from __future__ import absolute_import
 
-import Queue
+
+import queue
 import collections
 import logging
 import socket
 import threading
 import time
-import urllib
-import urllib2
-import urlparse
+import urllib.request
+import urllib.parse
+import urllib.error
 
 import requests
 
@@ -143,7 +143,7 @@ class SessionExpired(Error):
 def encode_dict(dct):
     """Make a dict out of the given key/value pairs, but only include values
     that are not None."""
-    return urllib.urlencode([p for p in dct.iteritems() if p[1] is not None])
+    return urllib.parse.urlencode([p for p in dct.items() if p[1] is not None])
 
 
 def _replace_url_host(url, hostname=None):
@@ -151,9 +151,9 @@ def _replace_url_host(url, hostname=None):
     is not None, otherwise simply return the original URL."""
     if not hostname:
         return url
-    parsed = urlparse.urlparse(url)
+    parsed = urllib.parse.urlparse(url)
     new = [parsed[0], hostname] + list(parsed[2:])
-    return urlparse.urlunparse(new)
+    return urllib.parse.urlunparse(new)
 
 
 def _decode_field(s, prev=None):
@@ -163,12 +163,12 @@ def _decode_field(s, prev=None):
         3. Literal '' indicates unchanged since previous update.
         4. If the string starts with either '$' or '#', but is not length 1,
            trim the first character.
-        5. Unicode escapes of the form '\uXXXX' are unescaped.
+        5. Unicode escapes of the form '\\uXXXX' are unescaped.
 
     Returns the decoded Unicode string.
     """
     if s == '$':
-        return u''
+        return ''
     elif s == '#':
         return None
     elif s == '':
@@ -202,7 +202,7 @@ class WorkQueue(object):
     def __init__(self):
         """Create an instance."""
         self.log = logging.getLogger('WorkQueue')
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
         self.thread = threading.Thread(target=self._main)
         self.thread.setDaemon(True)
         self.thread.start()
@@ -403,11 +403,11 @@ class LsClient(object):
     def _post(self, suffix, data, base_url=None):
         """Perform an HTTP post to `suffix`, logging before and after. If an
         HTTP exception is thrown, log an error and return the exception."""
-        url = urlparse.urljoin(base_url or self.base_url, suffix)
+        url = '/'.join([base_url or self.base_url, suffix])
         try:
-            return requests.post(url, data=data, prefetch=False,
+            return requests.post(url, data=data, stream=False,
                 timeout=self._get_request_timeout())
-        except urllib2.HTTPError, e:
+        except urllib.error.HTTPError as e:
             self.log.error('HTTP %d for %r', e.getcode(), url)
             return e
 
@@ -423,7 +423,7 @@ class LsClient(object):
             return
 
         table_info = bits[0].split(',')
-        table_id, item_id = map(int, table_info[:2])
+        table_id, item_id = list(map(int, table_info[:2]))
         table = self._table_map.get(table_id)
         if not table:
             self.log.debug('Unknown table %r; dropping row', table_id)
@@ -435,7 +435,7 @@ class LsClient(object):
             run_and_log(table._dispatch_update, item_id, bits[1:])
 
     # Constants for _recv_line -> _do_recv communication.
-    R_OK, R_RECONNECT, R_END = range(3)
+    R_OK, R_RECONNECT, R_END = list(range(3))
 
     def _recv_line(self, line):
         """Parse a line from Lightstreamer and act accordingly. Returns True to
@@ -480,7 +480,7 @@ class LsClient(object):
                 return True
 
     def _is_transient_error(self, e):
-        if isinstance(e, urllib2.URLError) \
+        if isinstance(e, urllib.error.URLError) \
                 and isinstance(e.reason, socket.error):
             return True
         return isinstance(e, (socket.error, TransientError))
@@ -495,7 +495,7 @@ class LsClient(object):
             try:
                 running = self._do_recv()
                 fail_count = 0
-            except Exception, e:
+            except Exception as e:
                 if not self._is_transient_error(e):
                     self.log.exception('_do_recv failure')
                     break
@@ -520,12 +520,13 @@ class LsClient(object):
         """
         if req.status_code != 200:
             raise TransientError('HTTP status %d', req.status_code)
-        status = next(line_it)
+        status = next(line_it).decode()
+        print(status)
         if status.startswith('SYNC ERROR'):
             raise SessionExpired()
         if not status.startswith('OK'):
             raise TransientError('%s %s: %s' %
-                (status, next(line_it), next(line_it)))
+                (status, next(line_it).decode(), next(line_it).decode()))
 
     def _parse_session_info(self, line_it):
         """Parse the headers from `fp` sent immediately following an OK
@@ -535,7 +536,7 @@ class LsClient(object):
         for line in line_it:
             if line:
                 blanks = 0
-                key, value = line.rstrip().split(':', 1)
+                key, value = line.decode().rstrip().split(':', 1)
                 self._session[key] = value
             else:
                 blanks += 1
@@ -558,7 +559,7 @@ class LsClient(object):
             self._set_state(STATE_DISCONNECTED)
             raise
         self._parse_session_info(line_it)
-        for table in self._table_map.itervalues():
+        for table in self._table_map.values():
             self._enqueue_table_create(table)
         self._thread = threading.Thread(target=self._recv_main)
         self._thread.setDaemon(True)

@@ -31,6 +31,6 @@ setup(
     url='http://github.com/dw/py-lightstreamer/',
     py_modules=['lightstreamer'],
     install_requires=[
-        'requests'
+        'requests>=2.0.0'
     ]
 )
